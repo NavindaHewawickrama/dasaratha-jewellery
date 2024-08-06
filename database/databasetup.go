@@ -10,24 +10,24 @@ import (
 	"go.mongodb.org/mongo-driver/mongo/options"
 )
 
-func DBSet() *mongo.CLient {
-	client, err := mongo.NewClient(options.Client().ApplyURL("mongodb://localhost:3000"))
+func DBSet() *mongo.Client {
+	client, err := mongo.NewClient(options.Client().ApplyURI("mongodb://localhost:3000"))
 
-	if err != null {
-		log.fatal(err)
+	if err != nil {
+		log.Fatal(err)
 	}
 
-	ctx, cancel := context.WithTimeOut(context.Background(), 10*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 
 	defer cancel()
 
 	err = client.Connect(ctx)
-	if err != null {
+	if err != nil {
 		log.Fatal(err)
 	}
 
 	client.Ping(context.TODO(), nil)
-	if err != null {
+	if err != nil {
 		log.Println("failed to connect to mongodb")
 		return nil
 	}

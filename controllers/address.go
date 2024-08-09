@@ -2,14 +2,15 @@ package controllers
 
 import (
 	"context"
+	"log"
 	"net/http"
 	"time"
 
 	"github.com/NavindaHewawickrama/dasaratha-jewellery/models"
 	"github.com/gin-gonic/gin"
-	"gituhb.com/NavindaHewawickrama/dasaratha-jewellery/models"
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/bson/primitive"
+	"go.mongodb.org/mongo-driver/mongo"
 )
 
 func AddAddress() gin.HandlerFunc {
@@ -24,7 +25,7 @@ func AddAddress() gin.HandlerFunc {
 			return
 		}
 
-		address, err:= ObjectIDFromHex(user_id)
+		address, err := primitive.ObjectIDFromHex(user_id)
 		if err != nil {
 			c.IndentedJSON(500, "Internal server error")
 		}
@@ -34,44 +35,48 @@ func AddAddress() gin.HandlerFunc {
 		addresses.Address_id = primitive.NewObjectID()
 
 		if err := c.ShouldBindJSON(&addresses); err != nil {
-
-
-		address := models.Address{}
-		if err := c.BindJSON(&address); err != nil {
 			c.IndentedJSON(http.StatusNotAcceptable, err.Error())
-			return
 		}
 
 		var ctx, cancel = context.WithTimeout(context.Background(), 100*time.Second)
 
-		match_filter := bson.D{{Key:"$match",Value: bson.D{primitive.E{Key: "_id",Value: address}}}}
-		unwind := bson.D{{Key: "$unwind",Value: bson.D{primitive.E{Key: "path",Value: "$address"}}}}
+		match_filter := bson.D{{Key: "$match", Value: bson.D{primitive.E{Key: "_id", Value: address}}}}
+		unwind := bson.D{{Key: "$unwind", Value: bson.D{primitive.E{Key: "path", Value: "$address"}}}}
+		group := bson.D{{Key: "$group", Value: bson.D{primitive.E{Key: "_id", Value: "$address_id"}, {Key: "count", Value: bson.D{primitive.E{Key: "$sum", Value: 1}}}}}}
 
+		pointcursor, err := UserCollection.Aggregate(ctx, mongo.Pipeline{match_filter, unwind, group})
 
-
-
-
-
-		usert_id, err := primitive.ObjectIDFromHex(user_id)
 		if err != nil {
 			c.IndentedJSON(500, "Internal server error")
 		}
 
-		var ctx, cancel = context.WithTimeout(context.Background(), 100*time.Second)
-		defer cancel()
+		var addressinfo []bson.M
+		if err = pointcursor.All(ctx, &addressinfo); err != nil {
+			panic(err)
+		}
 
-		filter := bson.D{primitive.E{Key: "_id", Value: usert_id}}
-		update := bson.D{{Key: "$push", Value: bson.D{primitive.E{Key: "address", Value: address}}}}
-		_, err = UserCollection.UpdateOne(ctx, filter, update)
-		if err != nil {
-			c.IndentedJSON(404, "Wrong command")
-			return
+		var size int32
+		for _, address_no := range addressinfo {
+			count := address_no["count"]
+			size = count.(int32)
+		}
+		if size < 2 {
+			filter := bson.D{primitive.E{Key: "_id", Value: address}}
+			update := bson.D{{Key: "$push", Value: bson.D{primitive.E{Key: "address", Value: addresses}}}}
+			_, err := UserCollection.UpdateOne(ctx, filter, update)
+
+			if err != nil {
+				log.Println(err)
+			}
+		} else {
+			c.IndentedJSON(400, "Address limit exceeded Not Allowed")
 		}
 
 		defer cancel()
 		ctx.Done()
-		c.IndentedJSON(200, "Successfully Added")
+
 	}
+
 }
 
 func EditHomeAddress() gin.HandlerFunc {
